@@ -1,0 +1,12 @@
+{
+	"rundirectory": "C:\\Monitoring\\", - directory where the script will be run
+	"outputfilename": "\\licdata.csv", - name the output CSV file
+	"webdirectory": "\\SERVER\\Monitoring$", - web directory where the images and web files will be copied, suggest a share on a web server
+	"scriptsleep": "5", - script sleep time between cycles, used for do/while loop
+	"maxmonths": "6", - maximum months to gather/show
+	"licenserver": "licsrv.domain.com",
+	"lictype": "ccu", - enter CCU (concurrent ) or UD (user/device)
+	"product": "xa", - enter xa (XenApp) or xd (XenDesktop)
+	"prodedition": "plt", - enter plt (Platinum) or ent (Enterprise), add any in script otherwise
+	"loop": "false" - enter true or false, false is generally for testing or if you like to control how often it runs using a scheduled task
+}

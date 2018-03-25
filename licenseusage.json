@@ -1,0 +1,12 @@
+{
+	"rundirectory": "C:\\Monitoring\\",
+	"outputfilename": "\\licdatafake.csv",
+	"webdirectory": "C:\\Monitoring\\",
+	"scriptsleep": "5",
+	"maxmonths": "6",
+	"licenserver": "licsrv.domain.com",
+	"lictype": "ccu",
+	"product": "xa",
+	"prodedition": "plt",
+	"loop": "false"
+}
