@@ -5,7 +5,7 @@
 	"scriptsleep": "5", - script sleep time between cycles, used for do/while loop
 	"maxmonths": "6", - maximum months to gather/show
 	"licenserver": "licsrv.domain.com",
-	"lictype": "ccu", - enter CCU (concurrent ) or UD (user/device)
+	"lictype": "ccu", - enter CCU (concurrent ), UD (user/device), CCS (Citrix Customer Select)
 	"product": "xa", - enter xa (XenApp) or xd (XenDesktop)
 	"prodedition": "plt", - enter plt (Platinum) or ent (Enterprise), add any in script otherwise
 	"loop": "false" - enter true or false, false is generally for testing or if you like to control how often it runs using a scheduled task
