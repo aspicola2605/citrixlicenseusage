@@ -1,6 +1,6 @@
 {
 	"rundirectory": "C:\\Monitoring\\",
-	"outputfilename": "\\licdatafake.csv",
+	"outputfilename": "licdatafake.csv",
 	"webdirectory": "C:\\Monitoring\\",
 	"scriptsleep": "5",
 	"maxmonths": "6",
