@@ -14,7 +14,9 @@
     - Edit the JSON file using the template as a base
 
     Versions:
-    3/25/2018 - Version 1.00 - COMPLETE - Alex Spicola
+    3/25/2018 - Version 1.00 - Alex Spicola
+	3/27/2018 - Version 2.00 - Alex Spicola
+		- Added CCS (Citrix Customer Select) to license type
 
 #>
 #=========================================================================================================================
@@ -104,6 +106,10 @@ elseif ( $lictype -eq "ud" ) #User/Device
 { 
 	$type = "UD" 
 } 
+elseif ( $lictype -eq "ccs" ) #Citrix Customer Select
+{
+	$type ="CCS"
+}
 
 $licPool | ForEach-Object{ If ($_.PLD -eq "$($prd)_$($ed)_$($type)") {
     $Total = $Total + $_.Count
@@ -382,16 +388,8 @@ $body = @"
                     <th>% In Use</th><td></td><td>$PctUsed%</td>
                 </tr>
                 <tr>
-                    <th>Plt In Use</th><td></td><td>$PlatInUse</td>
-                </tr>
-                <tr>
-                    <th>Ent In Use</th><td></td><td>$EntInUse</td>
-                </tr>
                 <tr>
                     <th>Lic. Owned</th><td></td><td>$Total</td>
-                </tr>
-                <tr>
-                    <th>Ent. Lic. Reserve</th><td></td><td>$EntTotal</td>
                 </tr>
                 <tr height="14"><td></td></tr>
                 <tr>
@@ -412,12 +410,6 @@ $body = @"
                 </tr>
                 <tr>
                     <th>30 Day Max</th><td></td><td>$($last30Max.InUse) ($($last30Max.Date))</td>
-                </tr>
-                <tr>
-                    <th>Plt 30 Day Max</th><td></td><td>$($last30PltMax.PlatInUse) ($($last30PltMax.Date))</td>
-                </tr>
-                <tr>
-                    <th>Ent 30 Day Max</th><td></td><td>$($last30EntMax.EntInUse) ($($last30EntMax.Date))</td>
                 </tr>
             </table>
         </td>
