@@ -5,8 +5,8 @@
 	"scriptsleep": "5",
 	"maxmonths": "6",
 	"licenserver": "licsrv.domain.com",
-	"lictype": "ccu",
-	"product": "xa",
+	"lictype": "ccs",
+	"product": "xdt",
 	"prodedition": "plt",
 	"loop": "false"
 }
