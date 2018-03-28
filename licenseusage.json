@@ -1,12 +1,12 @@
 {
 	"rundirectory": "C:\\Monitoring\\",
-	"outputfilename": "licdatafake.csv",
+	"outputfilename": "licdata.csv",
 	"webdirectory": "C:\\Monitoring\\",
 	"scriptsleep": "5",
 	"maxmonths": "6",
 	"licenserver": "licsrv.domain.com",
-	"lictype": "ccs",
 	"product": "xdt",
 	"prodedition": "plt",
-	"loop": "false"
+	"lictype": "ccs",
+	"loop": "true"
 }
