@@ -1,6 +1,3 @@
-<h2>VERSION UPDATE AND ENHANCEMENTS IN PROGRESS</h2>
-Current version does work. However, I'm working to make things more dynamic.
-
 <h2>Citrix License Usage</h2>
 
 <b>Description:</b>
