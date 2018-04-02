@@ -1,9 +1,9 @@
 {
 	"rundirectory": "C:\\Monitoring\\CitrixLicenseUsage\\",
 	"outputfilename": "licdata.csv",
-	"webdirectory": "C:\\Monitoring\\CitrixLicenseUsage\\Output\\",
+	"webdirectory": "C:\\Monitoring\\CitrixLicenseUsage\\",
 	"scriptsleep": "1",
 	"maxmonths": "6",
-	"licenserver": "as149650",
+	"licenserver": "licsrv.domain.com",
 	"loop": "false"
 }
