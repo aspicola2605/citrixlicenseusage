@@ -1,151 +1,209 @@
 ﻿#=========================================================================================================================
 <#
-    Author: Alex Spicola
-    Created: March 2018
-    
-    Purpose:
-    Gather data from Citrix licensing server using WMI. Data is output to CSV file and then utilized to create an ASP.NET graph and a web page.
-    Script can gather CCU (concurrent) and U/D (user device) data.
-	Script could be edited to run against multiple license servers and aggregate the data.
-    No charts will begin to be created until enough datapoints exist, this means greater than one single run. For more than a real-time chart multiple days of data are required.
-    Charts will create starting with >1 datapoint but they will not be the for the timeframe list. This will fill in over time as the data is gathered. This will require a continual loop or scheduled task.
+.SYNOPSIS
+Gathers, calculates, and charts Citrix license information
 
-    ***Pre-requisities***
- 	- Install Microsoft Chart Controls for .NET - https://www.microsoft.com/en-us/download/details.aspx?id=14422
-      - This is required for the ASP.NET charting within the script and should be installed on the hosting server
-    - Edit the JSON file using the template as a base
+.DESCRIPTION
+Gather data from Citrix licensing server using WMI. Data is output to CSV file and then utilized to create an ASP.NET graph and a web page.
+Script can gather CCU (concurrent) and U/D (user device) data.
+Script could be edited to run against multiple license servers and aggregate the data.
+No charts will begin to be created until enough datapoints exist, this means greater than one single run. 
+For more than a real-time chart multiple days of data are required.
+Charts will create starting with >1 datapoint but they will not be the for the timeframe list. 
+This will fill in over time as the data is gathered. This will require a continual loop or scheduled task.
 
-    Versions:
-    3/25/2018 - Version 1.00
-	3/27/2018 - Version 2.00
-		- Added CCS (Citrix Customer Select) to license type
-    3/28/2018 - Version 3.00
-        - Removed additional hardcoding from original
-        - Updated outputs
-        - Create web directory as necessary
-        - Updated variables to PascalCase
-        - Removed some whitespace
-        - Changed logfile name
-        - Updated chart creation
-            - Single data point will not create any charts, multiple datapoints are required
-            - Less than a day of data will create only real-time chart
-            - Greater than a day of data will create all charts
-        - Added HTML change to output text to page when no charts are created
-    3/30/2018 - Version 4.00 
-        - Moved transcript to different place
-        - Updated outputs
-        - Updated when only real-time chart is created 
+.PREREQUISITES
+Install Microsoft Chart Controls for .NET - https://www.microsoft.com/en-us/download/details.aspx?id=14422
+	This is required for the ASP.NET charting within the script and should be installed on the hosting server
+Edit the JSON file using the template as a base
+
+.NOTES
+	Author: Alex Spicola
+	Current Version: 2.0
+
+.CHANGE CONTROL
+	Name					Date			Version				Detail	
+	Alex Spicola			3/25/2018		1.0					Initial creation
+	Alex Spicola			3/27/2018		1.1					Added CCS (Citrix Customer Select) to license type
+	Alex Spicola			3/28/2018		1.2					Removed additional hardcoding from original
+																Make web directory when it does not exist
+																Updated variables to PascalCase 
+																Removed some whitespace
+																Changed logfile name
+																Updated chart creation
+																	- Single data point will not create any charts, multiple datapoints are required
+																	- Less than a day of data will create only real-time chart
+																	- Greater than a day of data will create all charts
+																	- Added HTML change to output text to page when no charts are created
+	Alex Spicola			3/30/2018		1.3					Moved transcript to different place
+    															Updated when only real-time chart is created
+	Alex Spicola			4/1/2018		2.0					Dynamic read of licenses from WMI, removing JSON option
+																Changed output directory variable naming
 #>
 #=========================================================================================================================
-#Set script run directory
+#FUNCTIONS
+#=========================================================================================================================
+function Get-XDLicenseCount
+{
+	        <#   
+	.SYNOPSIS   
+	    Grabs Citrix license data
+	.DESCRIPTION 
+	    Grabs Citrix license data 
+	.PARAMETER LicenseServer
+	    Citrix License Server
+	.NOTES
+		Provided by developer associate, not a Bemis employee
+	
+	    Name                    Version         Date                Change Detail
+	    Ryan Butler             1.0             29/03/2018          Function Creation
+		Alex Spicola			1.1				02/04/2018			Added WSMAN version test and DCOM pull for CIM Session if older PS version
+	.EXAMPLE
+	    None Required
+	#>	
+		[CmdletBinding()]
+		Param
+		(
+			[parameter(Mandatory = $true, ValueFromPipeline = $true)]
+			$LicenseServer
+			
+		)
+		
+		#Test WSMan and get product version
+		[regex]$RegEx = "\d\.\d$" #Regular expression for output split
+		[int]$WSManVersion = ($RegEx.Match((Test-WSMan $LicenseServer).ProductVersion)).value #Get only product version
+				
+		#WSMan v3 or greater - use CIM Session WSMan
+		#WSMAN v2 or less - use CIM Instance DCOM
+		if ($WSManVersion -ge 3)
+		{
+			#Try to connect to license server and pull data with CIM WSMan
+			try
+			{
+				$LicenseData = Get-CimInstance -class "Citrix_GT_License_Pool" -namespace "ROOT\CitrixLicensing" -ComputerName $LicenseServer -ErrorAction stop
+			}
+			catch
+			{
+				Write-error "Could not pull license data from license server"
+				return $false
+			}
+		} else {
+			$SessionOpt = New-CimSessionOption -Protocol DCOM
+			$CimSession = New-CimSession -ComputerName $LicenseServer -SessionOption $SessionOpt
+			
+			#Try to connect to license server and pull data with CIM DCOM
+			try
+			{
+				
+				$LicenseData = Get-CimSession | Get-CimInstance -class "Citrix_GT_License_Pool" -namespace "ROOT\CitrixLicensing" -ErrorAction stop
+				
+				#Remove any CIM sessions opened with DCOM
+				Get-CimSession | Remove-CimSession
+			}
+			catch
+			{
+				Write-error "Could not pull license data from license server"
+				return $false
+			}
+		}
+	
+		#Create results array
+		$results = @()
+		
+		if ($LicenseData)
+		{
+			#Create custom object for each license found and add to results
+			foreach ($lic in $LicenseData)
+			{
+				$results += [PSCustomObject]@{
+					"LicenseName" = $lic.PLD
+					"Count" = $lic.Count
+					"InUseCount" = $lic.InUseCount
+					"LicenseType" = $lic.LicenseType
+					"SubscriptionDate" = $lic.SubscriptionDate
+				}
+			}
+			return $results
+		}
+		else
+		{
+			Write-Warning "No license data found"
+			return $false
+		}			
+}
+#=========================================================================================================================
+#MAIN PROGRAM
+#=========================================================================================================================
+#Set script run directory for JSON file
 $RunDir = $PSScriptRoot
 
 #Import the JSON file
-$JSONInput = ConvertFrom-Json "$(Get-Content "$runDir\licenseusage.json")"
-#$JSONInput = ConvertFrom-Json "$(Get-Content ".\licenseusage.json")"#Used for testing
+#$JSONInput = Get-Content "$RunDir\licenseusage.json" | ConvertFrom-Json
+$JSONInput = Get-Content ".\licenseusage.json" | ConvertFrom-Json
 
 #Convert JSON inputs to varibles for use in script
 $ScriptDir = $JSONInput.rundirectory #Directory the script runs
-$WebDir = $JSONInput.webdirectory #Web directory to place any web files
+$OutDir = $JSONInput.webdirectory #Web directory to place any web files
 [int]$SleepMin = $JSONInput.scriptsleep #Minutes for cycle sleep time, use in infinite loop to sleep the script for a period of time
 $MaxMonths = $JSONInput.maxmonths #Sets limit for number of months to use for data publishing (stats and graphs)
 $File = $JSONInput.outputfilename #Output file name for license data CSV, data will append
 $LicSrv = $JSONInput.licenserver
-$Prod = $JSONInput.product
-$ProdEdition = $JSONInput.prodedition
-$LicType = $JSONInput.lictype
 $Loop = $JSONInput.loop #Infinifite loop variable
 
 #Set web directory/out folder location and CSV file name
-if ($WebDir -ne $ScriptDir) { if (!(Test-Path $WebDir)) {New-Item -ItemType directory -Path $WebDir | Out-Null}} #Create ouput/webdirectory if necessary
-$FileName = $($WebDir)+$($File) #Combine output folder and filename
+if ($OutDir -ne $ScriptDir) #Create ouput directory if it does not exist
+{
+	if (!(Test-Path $OutDir))
+	{
+		New-Item -ItemType directory -Path $OutDir | Out-Null
+	}
+} 
+$FileName = $($OutDir)+$($File) #Combine output folder and filename
 
 #Start the loop, this will only continue if configured in JSON
 do {
 
 #Start transcript
-Start-Transcript "$RunDir\ctxlicusglog.log"
+Start-Transcript "$ScriptDir\ctxlicusglog.log"
+$OutDate = Get-Date -format "MM/dd/yyyy"
+Write-Output "$($OutDate): ***BEGIN SCRIPT EXECUTION***"
+Write-Output "$($OutDate): Set date and time"
 
-#Date and time for CSV output
-Write-Output "$($Date): Set date and time for CSV output"
-$Date = Get-Date -format "MM/dd/yyyy" ; $Time = Get-Date -format "HH:mm tt"
-
-#=========================================================================================================================
-Write-Output "$($Date): Start the script"
-Write-Output "$($Date): Output location and file: $FileName"
+if ($Loop -eq $true) {Write-Output "$($OutDate): Loop is set to TRUE"} else {Write-Output "$($OutDate): Loop is set to FALSE"}
 
 #=========================================================================================================================
 #Gather all licensing data and output to usable CSV
 #Original code sources, used and edited some pieces.
 #https://www.jonathanmedd.net/2011/01/monitor-citrix-license-usage-with-powershell.html
 #=========================================================================================================================
-#Variables
-Write-Output "$($Date): Create variables"
-$Total = 0
-$InUse = 0
-
-#Output license server names
-Write-Output "$($Date): Citrix license server: $($LicSrv)"
-
-#Get Citrix licensing Info
-Write-Output "$($Date): Set WMI call for license server"
-$LicPool = gwmi -class "Citrix_GT_License_Pool" -Namespace "Root\CitrixLicensing" -comp $LicSrv
-if ($LicPool -ne $null) {Write-Output "$($Date): WMI pull was successful"} else { Write-Output "$($Date): WMI pull was NOT successful"}
+#Static variables
+$Date = Get-Date -format "MM/dd/yyyy" ; $Time = Get-Date -format "HH:mm tt"
+$Total = 0; $InUse = 0
 	
-#Gather license data for CCU (concurrent user) licenses, ensure to update the for proper version and license type for WMI object
-Write-Output "$($Date): Gather license data from license server"
-#Get product from JSON information
-if ($Prod -eq "xa") #XenApp
-{ 
-	$Prd = "MPS" 
-} 
-elseif ($Prod -eq "xd" -or $Prod -eq "xdt") #XenDesktop
-{ 
-	$Prd = "XDT" 
-}
-
-#Get product edition from JSON information
-if ($ProdEdition -eq "ent") #Enterprise licensing
-{ 
-    $Ed = "ENT" 
-} 
-elseif ($ProdEdition -eq "plt") #Platinum licensing
-{
-	$Ed = "PLT" 
-} 
-	
-#Get type from JSON information
-if ($LicType -eq "ccu") #Concurrent user
-{ 
-	$Type = "CCU" 
-} 
-elseif ($LicType -eq "ud") #User/Device
-{ 
-	$Type = "UD" 
-} 
-elseif ($LicType -eq "ccs") #Citrix Customer Select
-{
-	$Type ="CCS"
-}
-
-Write-Output "$($Date): License information: $($Prd)_$($Ed)_$($Type)"
+#Get licensing information
+$LicSrvData = Get-XDLicenseCount -LicenseServer $LicSrv
+$Products = ("MPS","XDT") #Static product array, MPS is XenApp, XDT is XenDesktop
+$LicPool = @()
 
 #Gather totals and in use count
-Write-Output "$($Date): Calculate percentages"
-$LicPool | ForEach-Object{ If ($_.PLD -eq "$($Prd)_$($Ed)_$($Type)") {
-    $Total = $Total + $_.Count
-    $InUse = $InUse + $_.InUseCount
-    }
+Write-Output "$($OutDate): Calculate total and in use counts"
+foreach ($Entry in $LicSrvData) {
+	foreach ($Prod in $Products) {
+		if ($Entry.LicenseName -ilike "*$Prod*") {$LicPool += $Entry}
+	}
 }
-Write-Output "$($Date): Calculated - Total: $($Total), In Use $($InUse)"
+	
+$LicPool | % {
+	$Total = $Total + $_.Count
+	$InUse = $InUse + $_.InUseCount
+}
 
 #Calculate the totals and percentages with data just pulled
-Write-Output "$($Date): Calculate percentages"
 $PctUsed = [Math]::Round($InUse/$Total*100,0)
 $Free = [Math]::Round($Total-$InUse)
 
 #Create hashtable object and export the data
-Write-Output "$($Date): Create object and add data"
+Write-Output "$($OutDate): Create object and add data"
 $Obj = New-Object psobject
 $Obj | Add-Member -MemberType NoteProperty -Name Date -Value $Date
 $Obj | Add-Member -MemberType NoteProperty -Name Time -Value $Time
@@ -155,20 +213,20 @@ $Obj | Add-Member -MemberType NoteProperty -Name Free -Value $Free
 $Obj | Add-Member -MemberType NoteProperty -Name PctUsed -Value $PctUsed
 
 #Export and append the data to a CSV file
-Write-Output "$($Date): Output data to CSV"
+Write-Output "$($OutDate): Output data to CSV"
 $Obj | Export-Csv $FileName -Append
 
 #=========================================================================================================================
 #Data Import
 #Import data from CSV file and cutback to month limit ($dataLimit variable)
 #=========================================================================================================================
-Write-Output "$($Date): Set start date for data"
+Write-Output "$($OutDate): Set start date for data"
 $StartDate = (Get-Date).AddMonths(-$MaxMonths)
 $StartDateFmt = ($StartDate | Get-Date -Format "MM/dd/yyyy")
 
-Write-Output "$($Date): Maximum months to import: $($MaxMonths) months"
+Write-Output "$($OutDate): Maximum months to import: $($MaxMonths) months"
 
-Write-Output "$($Date): Import data from $($FileName)"
+Write-Output "$($OutDate): Import data from $($FileName)"
 $LicData = @(Import-Csv $FileName | ? {[datetime]$_.Date -ge $StartDateFmt})
 #=========================================================================================================================
 #Graph Creation
@@ -178,20 +236,20 @@ $LicData = @(Import-Csv $FileName | ? {[datetime]$_.Date -ge $StartDateFmt})
 #https://blogs.technet.microsoft.com/richard_macdonald/2009/04/28/charting-with-powershell/
 #https://gallery.technet.microsoft.com/scriptcenter/Charting-Line-Chart-using-df47af9c
 #=========================================================================================================================
-Write-Output "$($Date): Create graphs from data"
+Write-Output "$($OutDate): Create graphs from data"
 
 #Take license data and cut down to maximum per day for graphing
-Write-Output "$($Date): Create variables and arrays"
+Write-Output "$($OutDate): Create variables and arrays"
 #Variables
 $LicMaxDataAll = @()
 
 #Create array of unique dates to compare against
-Write-Output "$($Date): Get unique dates from data"
+Write-Output "$($OutDate): Get unique dates from data"
 $Dates = $LicData | select date -Unique
 
 #Check each individual date and find the maximum license in use count for all entries on that day
 #Output those entries to new array, cut down to single entry if there are multiple, write single entry to object for graphing
-Write-Output "$($Date): Find maximum for each date"
+Write-Output "$($OutDate): Find maximum for each date"
 foreach ($D in $Dates) 
 {	
 	$DayArr = @()
@@ -207,29 +265,29 @@ foreach ($D in $Dates)
     $LicMaxDataAll += $DayMax   
 }
 
-Write-Output "$($Date): Total entries in data file: $($LicMaxDataAll.Count)"
+Write-Output "$($OutDate): Total entries in data file: $($LicMaxDataAll.Count)"
 
 #Create real-time data points from all license data
-Write-Output "$($Date): Create real time datapoints"
+Write-Output "$($OutDate): Create real time datapoints"
 $LicDataRT = $LicData | select -Last 40
 $LicMaxData = $LicMaxDataAll
 
 #Get maximum and average for current month
-Write-Output "$($Date): Set maximum and average for current month"
+Write-Output "$($OutDate): Set maximum and average for current month"
 $SplitDate = ($Date -split "/")
 $Day = $SplitDate[1]
 $MaxCurrMonth = ($LicMaxData | select -Last $Day | measure -Property InUse -Maximum).Maximum
 $AvgCurrMonth = [math]::round(($LicMaxData | select -Last $Day | measure -Property InUse -Average).Average)
 
 #Get maximums and averages for last 30 days or all data if less than 30 days
-Write-Output "$($Date): Set maximum and averages for last 30 days"
+Write-Output "$($OutDate): Set maximum and averages for last 30 days"
 $Max30Days = ($LicMaxData | select -Last 30 | measure -Property InUse -Maximum).Maximum
 $Last30Avg = [math]::round(($LicMaxData | select -Last 30 | measure -Property InUse -Average).Average) #Average for last 30 days
 $Last30AvgPct = [math]::round(($LicMaxData | select -Last 30 | measure -Property PctUsed -Average).Average) #Average percentage for last 30 days
 $Last30Max  = $LicMaxData | select -Last 30 | ? { $_.InUse -eq $Max30Days } #Max for last 30 days
 
 #Chart creation options, used to create different charts for real-time (last 3 hours), last 7 days, last 30 days, and last 180 days
-Write-Output "$($Date): Set chart options based on datapoints"
+Write-Output "$($OutDate): Set chart options based on datapoints"
 if ($LicData.Count -eq 1) {$ChartOpts = $null} #Charts will not be created if only a single datapoint is found
 if ($LicData.Count -ge 2) {$ChartOpts = @("RT")} #Charts will not be created if only a single datapoint is found
 if ($LicMaxData.Count -gt 1) {$ChartOpts = @("RT",7,30,"MaxMonths")} #Chart options set to RT (real-time), 7 days, 30 days, and the maximum months from the JSON file.
@@ -237,9 +295,9 @@ if ($LicMaxData.Count -gt 1) {$ChartOpts = @("RT",7,30,"MaxMonths")} #Chart opti
 #Will only create charts when more than one datapoint is found
 if ($ChartOpts -ne $null) 
 {
-Write-Output "$($Date): Minimum datapoints found, start chart creation"
+Write-Output "$($OutDate): Minimum datapoints found, start chart creation"
     $ChartOpts | % {
-        Write-Output "$($Date): Current chart option: $($_)"
+        Write-Output "$($OutDate): Current chart option: $($_)"
 
         if ($_ -eq "RT") {$ChartData = $LicDataRT}
         if ($_ -eq "7") {$ChartData = $LicMaxData | select -Last 7 | sort -Descending}
@@ -251,27 +309,27 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
         if ($_ -eq "7") {$Interval = 1}
         if ($_ -eq "30") {$Interval = 2}
         if ($_ -eq "MaxMonths") {$Interval = 5}
-        Write-Output "$($Date): Chart interval: $($Interval)"
+        Write-Output "$($OutDate): Chart interval: $($Interval)"
 
         #Load charting controls
-        Write-Output "$($Date): Load chart controls"
+        Write-Output "$($OutDate): Load chart controls"
         [void][Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms.DataVisualization")
 
         #Create chart base
-        Write-Output "$($Date): Create chart base for $($_) chart"
+        Write-Output "$($OutDate): Create chart base for $($_) chart"
         $LicUsageChart = New-object System.Windows.Forms.DataVisualization.Charting.Chart
         $LicUsageChart.Width = 1200
         $LicUsageChart.Height = 800
         $LicUsageChart.BackColor = [System.Drawing.Color]::White
 
         #Create chart area
-        Write-Output "$($Date): Create chart area for $($_) chart"
+        Write-Output "$($OutDate): Create chart area for $($_) chart"
         $ChartArea = New-Object System.Windows.Forms.DataVisualization.Charting.ChartArea
         $ChartArea.Name = "ChartArea"
         $LicUsageChart.ChartAreas.Add($ChartArea)
 
         #Set chart styles
-        Write-Output "$($Date): Set chart styles for $($_) chart"
+        Write-Output "$($OutDate): Set chart styles for $($_) chart"
         $ChartArea.AxisX.IsLabelAutoFit = $True
         $ChartArea.AxisX.LabelStyle.Angle = "75"
         $ChartArea.AxisX.Interval = $Interval
@@ -283,7 +341,7 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
 	    if ($_ -eq "MaxMonths") {[void]$LicUsageChart.Titles.Add("Last $($MaxMonths) Months")}
 		
         #In Use licenses chart series
-        Write-Output "$($Date): Add in use data series for $($_) chart"
+        Write-Output "$($OutDate): Add in use data series for $($_) chart"
         [void]$LicUsageChart.Series.Add("In Use")
         $LicUsageChart.Series["In Use"].ChartType = [System.Windows.Forms.DataVisualization.Charting.SeriesChartType]::Line
         if ($_ -eq "RT") {$LicUsageChart.Series["In Use"].Points.DataBindXY($ChartData.Time, $ChartData.InUse)} 
@@ -292,7 +350,7 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
         $LicUsageChart.Series["In Use"].BorderWidth = 5
 
         #Licenses Owned licenses chart series
-        Write-Output "$($Date): Add total owned data series for $($_) chart"
+        Write-Output "$($OutDate): Add total owned data series for $($_) chart"
         [void]$LicUsageChart.Series.Add("Licenses Owned")
         $LicUsageChart.Series["Licenses Owned"].ChartType = [System.Windows.Forms.DataVisualization.Charting.SeriesChartType]::Line
         $LicUsageChart.Series["Licenses Owned"].Points.DataBindXY($ChartData.Date, $ChartData.Total)
@@ -302,7 +360,7 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
         #Trendline of In Use chart series (if not real time)
         if ($_ -ne "RT") 
         {
-            Write-Output "$($Date): Add trendline data series for $($_) chart"
+            Write-Output "$($OutDate): Add trendline data series for $($_) chart"
             [void]$LicUsageChart.Series.Add("Trend")
             $LicUsageChart.Series["Trend"].ChartType = [System.Windows.Forms.DataVisualization.Charting.SeriesChartType]::Line
             $LicUsageChart.Series["Trend"].BorderDashStyle = "Dot"
@@ -312,7 +370,7 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
         }
 
         #Create chart legend
-        Write-Output "$($Date): Create chart legend for $($_) chart"
+        Write-Output "$($OutDate): Create chart legend for $($_) chart"
         [void]$LicUsageChart.Legends.Add("Legend")
         $LicUsageChart.Legends["Legend"].Font = "segoeuilight,10pt"
         $LicUsageChart.Legends["Legend"].Docking = "Bottom"
@@ -328,19 +386,19 @@ Write-Output "$($Date): Minimum datapoints found, start chart creation"
         $Form.ShowDialog()#>
 
         #Output the charts as PNG  files and copy to web server
-        Write-Output "$($Date): Create PNG file for $($_) chart and copy to web folder"
-        if ( Test-Path "$($WebDir)CtxLicUsage$($_).png") { Remove-Item "$($WebDir)\CtxLicUsage$($_).png"} 
-        $LicUsageChart.SaveImage("$($WebDir)\CtxLicUsage$($_).png","png")
+        Write-Output "$($OutDate): Create PNG file for $($_) chart and copy to web folder"
+        if ( Test-Path "$($OutDir)CtxLicUsage$($_).png") { Remove-Item "$($OutDir)\CtxLicUsage$($_).png"} 
+        $LicUsageChart.SaveImage("$($OutDir)\CtxLicUsage$($_).png","png")
     }
-} else {Write-Output "$($Date): Minimum datapoints not found, no charts created"}
+} else {Write-Output "$($OutDate): Minimum datapoints not found, no charts created"}
 
 #=========================================================================================================================
 #Website creation
 #=========================================================================================================================
-Write-Output "$($Date): Create webpage"
+Write-Output "$($OutDate): Create webpage"
 
 #Varibles
-Write-Output "$($Date): Set variables"
+Write-Output "$($OutDate): Set variables"
 $Title = "Citrix License Usage"
 $WebDate = (Get-Date -format g)
 $CurrMonth = (Get-Culture).DateTimeFormat.GetMonthName(((Get-Date).Month))
@@ -349,7 +407,8 @@ $CurrMonth = (Get-Culture).DateTimeFormat.GetMonthName(((Get-Date).Month))
 if ($ChartOpts.Count -gt 1) #All charts created
 {
 $ChartLinks = @"
-    <a href="#" onclick="changeImage('./CtxLicUsageRT.png');">Real-Time</a> | <a href="#" onclick="changeImage('CtxLicUsage7.png');">Last 7 Days</a> | <a href="#" onclick="changeImage('./CtxLicUsage30.png');">Last 30 Days</a> | <a href="#" onclick="changeImage('./CtxLicUsageMaxMonths.png');">Last $($maxMonths) Months</a>
+    <a href="#" onclick="changeImage('./CtxLicUsageRT.png');">Real-Time</a> | <a href="#" onclick="changeImage('CtxLicUsage7.png');">Last 7 Days</a> | 
+	<a href="#" onclick="changeImage('./CtxLicUsage30.png');">Last 30 Days</a> | <a href="#" onclick="changeImage('./CtxLicUsageMaxMonths.png');">Last $($maxMonths) Months</a>
     <br>
     <img src = "./CtxLicUsageRT.png" id="imageReplace"/>
 "@
@@ -370,7 +429,7 @@ $ChartLinks = @"
 }
 
 #Create web header
-Write-Output "$($Date): Create web header"
+Write-Output "$($OutDate): Create web header"
 $Head = @"
 <html>
 <head>
@@ -417,7 +476,7 @@ td {
 "@
 
 #Create web body and add licensing data
-Write-Output "$($Date): Create web body and add all charts and data"
+Write-Output "$($OutDate): Create web body and add all charts and data"
 $Body = @"
 <body>
 <div class="liccontent">
@@ -477,16 +536,16 @@ $Body = @"
 "@
 
 #Remove old HTML file
-if (Test-Path "$WebDir\ctxlicensing.htm") {Remove-Item "$WebDir\ctxlicensing.htm"}
+if (Test-Path "$OutDir\ctxlicensing.htm") {Remove-Item "$OutDir\ctxlicensing.htm"}
 
-Write-Output "$($Date): Output all web data"
-$Head | Out-File "$WebDir\ctxlicensing.htm"
-$Style | Out-File "$WebDir\ctxlicensing.htm" -Append
-$Body | Out-File "$WebDir\ctxlicensing.htm" -Append
+Write-Output "$($OutDate): Output all web data"
+$Head | Out-File "$OutDir\ctxlicensing.htm"
+$Style | Out-File "$OutDir\ctxlicensing.htm" -Append
+$Body | Out-File "$OutDir\ctxlicensing.htm" -Append
 
 if ( $Loop -eq "true" ) { 
     #Sleep between script loop cycles
-    Write-Output "$($Date): Script will sleep for $($SleepMin) minutes" 
+    Write-Output "$($OutDate): Script will sleep for $($SleepMin) minutes" 
     $SleepTimer = $SleepMin * 60 #Converts sleep minutes to seconds
     Start-Sleep $SleepTimer
 }

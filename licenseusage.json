@@ -1,12 +1,9 @@
 {
-	"rundirectory": "C:\\Monitoring\\",
+	"rundirectory": "C:\\Monitoring\\CitrixLicenseUsage\\",
 	"outputfilename": "licdata.csv",
-	"webdirectory": "C:\\Monitoring\\",
-	"scriptsleep": "5",
+	"webdirectory": "C:\\Monitoring\\CitrixLicenseUsage\\Output\\",
+	"scriptsleep": "1",
 	"maxmonths": "6",
-	"licenserver": "licsrv.domain.com",
-	"product": "xdt",
-	"prodedition": "plt",
-	"lictype": "ccs",
-	"loop": "true"
+	"licenserver": "as149650",
+	"loop": "false"
 }
