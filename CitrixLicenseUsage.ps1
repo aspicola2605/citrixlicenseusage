@@ -138,8 +138,7 @@ function Get-XDLicenseCount
 $RunDir = $PSScriptRoot
 
 #Import the JSON file
-#$JSONInput = Get-Content "$RunDir\licenseusage.json" | ConvertFrom-Json
-$JSONInput = Get-Content ".\licenseusage.json" | ConvertFrom-Json
+$JSONInput = Get-Content "$RunDir\licenseusage.json" | ConvertFrom-Json
 
 #Convert JSON inputs to varibles for use in script
 $ScriptDir = $JSONInput.rundirectory #Directory the script runs
