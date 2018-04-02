@@ -1,12 +1,9 @@
 {
 	"rundirectory": "C:\\Monitoring\\", - directory where the script will be run
 	"outputfilename": "\\licdata.csv", - name the output CSV file
-	"webdirectory": "C:\\Monitoring\\", - web directory where the images and web files will be copied, can be the rundirectory or elsewhere, even a share or other server
+	"webdirectory": "\\SERVER\\Monitoring$", - web directory where the images and web files will be copied, suggest a share on a web server
 	"scriptsleep": "5", - script sleep time between cycles, used for do/while loop
 	"maxmonths": "6", - maximum months to gather/show
 	"licenserver": "licsrv.domain.com",
-	"product": "xdt", - enter xa (XenApp) or xd/xdt (XenDesktop - accepts both)
-	"prodedition": "plt", - enter plt (Platinum) or ent (Enterprise), will need to custom add any in script otherwise - contact me with additional adds
-	"lictype": "ccs", - enter one of the following: CCU (concurrent ), UD (user/device), CCS (Citrix Customer Select)
-	"loop": "true" - enter true or false, false is generally for testing, or if you like to control how often it runs using a scheduled task
+	"loop": "false" - enter true or false, false is generally for testing or if you like to control how often it runs using a scheduled task
 }
